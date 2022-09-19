@@ -1,0 +1,204 @@
+openapi: 3.0.0
+
+servers:
+  - url: http://localhost:8080
+
+info:
+  description: Documentation-API
+  version: 1.0.0
+  title: Avito Balance Documentation-API
+  contact:
+    email: a.uzhova@zebrains.team
+
+tags:
+  - name: Balance
+    description: Методы для работы с балансом
+
+paths:
+  /balance:
+    get:
+      tags:
+        - Balance
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/Currency'
+      summary: Получение информации о балансе
+      description: Получение информации о балансе пользователе
+      responses:
+        '200':
+          description: Ок
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+    put:
+      tags:
+        - Balance
+      security: []
+      summary: Обновление баланса
+      description: Обновление баланса пользователя
+      responses:
+        '200':
+          description: Баланс обновлен
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BalanceUpdateRequest'
+
+  /balance/transfer:
+    post:
+      tags:
+        - Balance
+      security: []
+      summary: Перевод между пользователями
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BalanceTransferRequest'
+      responses:
+        '200':
+          description: Перевод выполнен
+
+  /balance/history:
+    get:
+      tags:
+        - Balance
+      security: []
+      summary: Получение истории изменения баланса
+      parameters:
+        - $ref: '#/components/parameters/ColumnQuery'
+        - $ref: '#/components/parameters/OrderByQuery'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/OffsetQuery'
+      responses:
+        '200':
+          description: Данные получены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryBalanceListResponse'
+
+components:
+  schemas:
+    BalanceUpdateRequest:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          example: 1
+        amount:
+          type: number
+          example: 150.25
+
+    BalanceTransferRequest:
+      type: object
+      properties:
+        user_from:
+          type: integer
+          example: 1
+        user_to:
+          type: integer
+          example: 2
+        amount:
+          type: number
+          example: 150.25
+
+    BalanceResponse:
+      type: object
+      description: Баланс пользователя
+      properties:
+        id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+          example: 1
+        total:
+          type: number
+          description: Сумма
+          example: 105.00
+
+    HistoryBalanceListResponse:
+      type: object
+      description: История изменения баланса
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryBalanceResponse'
+
+    HistoryBalanceResponse:
+      type: object
+      description: Изменение баланса
+      properties:
+        id:
+          type: integer
+          example: 1
+        balance_id:
+          type: integer
+          example: 1
+        amount:
+          type: number
+          description: Сумма
+          example: 105.10
+        comment:
+          type: string
+          description: Комментарий
+          example: "Списание"
+        date:
+          type: string
+          description: Дата
+          example: "2022-09-11 11:10:10"
+
+  parameters:
+    UserId:
+      name: user_id
+      in: query
+      description: id пользователя
+      required: true
+      schema:
+        type: integer
+
+    Currency:
+      name: currency
+      in: query
+      description: Валюта
+      schema:
+        type: string
+
+    LimitQuery:
+      name: limit
+      in: query
+      description: Максимальное количество записей
+      schema:
+        type: integer
+        minimum: 0
+        default: 20
+
+    OffsetQuery:
+      name: offset
+      in: query
+      description: Количество, которое необходимо отступить
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+    ColumnQuery:
+      name: column
+      in: query
+      description: Столбец для сотрировки
+        | amount или date
+      schema:
+        type: string
+
+    OrderByQuery:
+      name: order_by
+      in: query
+      description: Тип сотрировки
+        | asc или desc, по умолчанию asc
+      schema:
+        type: string
