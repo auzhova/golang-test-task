@@ -2,7 +2,6 @@ version: "3"
 
 services:
     app:
-        hostname: app
         build:
             dockerfile: Dockerfile
             context: .
@@ -13,10 +12,8 @@ services:
             - ./:/app
         depends_on:
             - database
-        networks:
-            - balance
+
     database:
-        hostname: database
         image: postgres:12.7
         restart: always
         ports:
@@ -28,8 +25,3 @@ services:
         volumes:
             - ./postgresql_data:/var/lib/postgresql/data
             - ./db.sql:/docker-entrypoint-initdb.d/db.sql
-        networks:
-            - balance
-networks:
-    balance:
-        driver: bridge
