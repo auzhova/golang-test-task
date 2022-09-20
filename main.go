@@ -10,22 +10,22 @@ import (
 )
 
 type User struct {
-	id      int    `json:"id"`
-	name 	string `json:"name"`
+	id   int
+	name string
 }
 
 type Balance struct {
-	id    int     	`json:"id"`
-	user  User    	`json:"user_id"`
-	total float64 	`json:"total"`
+	id    int
+	user  int64
+	total float64
 }
 
 type History struct {
-	id      int       `json:"id"`
-	balance Balance   `json:"balance_id"`
-	amount  float64   `json:"amount"`
-	comment string    `json:"comment"`
-	date    time.Time `json:"date"`
+	id      int
+	balance int64
+	amount  float64
+	comment string
+	date    time.Time
 }
 
 func getBalance(w http.ResponseWriter, r *http.Request) {
@@ -41,16 +41,19 @@ func getBalance(w http.ResponseWriter, r *http.Request) {
 	rowUser := DB.QueryRow(sqlUser, userId)
 	if err := rowUser.Scan(&user.id, &user.name); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode("Пользователя c id " + userId + " не найден!")
+		//json.NewEncoder(w).Encode("Пользователя c id " + userId + " не найден!")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Пользователь c id = %v не найден! %+v", userId, err))
 		return
 	}
 
 	var balance Balance
-	sqlBalance := `SELECT b.id, b.user_id, b.total FROM balance as b WHERE user_id=$1;`
+	sqlBalance := `SELECT b.id, b.user_id, b.total FROM balances as b WHERE user_id=$1;`
 	rowBalance := DB.QueryRow(sqlBalance, userId)
 	if err := rowBalance.Scan(&balance.id, &balance.user, &balance.total); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode("Баланс пользователя c id " + userId + " не найден!")
+		//json.NewEncoder(w).Encode("Баланс пользователя c id " + userId + " не найден!")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Баланс пользователя c id = %v не найден! %+v", userId, err))
+		fmt.Sprintf(" %+v", err)
 		return
 	}
 
@@ -78,16 +81,19 @@ func updateBalance(w http.ResponseWriter, r *http.Request) {
 	rowUser := DB.QueryRow(sqlUser, userId)
 	if err := rowUser.Scan(&user.id, &user.name); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode("Пользователя c id " + userId + " не найден!")
+		//json.NewEncoder(w).Encode("Пользователя c id " + userId + " не найден!")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Пользователя c id = %v не найден! %+v", userId, err))
 		return
 	}
 
 	var balance Balance
-	sqlBalance := `SELECT b.id, b.user_id, b.total FROM balance as b WHERE user_id=$1;`
+	sqlBalance := `SELECT b.id, b.user_id, b.total FROM balances as b WHERE user_id=$1;`
 	rowBalance := DB.QueryRow(sqlBalance, userId)
 	if err := rowBalance.Scan(&balance.id, &balance.user, &balance.total); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode("Баланс пользователя c id " + userId + " не найден!")
+		//json.NewEncoder(w).Encode("Баланс пользователя c id " + userId + " не найден!")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Баланс пользователя c id = %v не найден! %+v", userId, err))
+		fmt.Sprintf(" %+v", err)
 		return
 	}
 
@@ -96,7 +102,7 @@ func updateBalance(w http.ResponseWriter, r *http.Request) {
 		amount, _ = strconv.ParseFloat(params["amount"], 64)
 	}
 
-	if amount < 0 && balance.total < amount{
+	if amount < 0 && balance.total < amount {
 		w.WriteHeader(400)
 		json.NewEncoder(w).Encode(fmt.Sprintf("Недостаточно средств для списания. Баланс: %f", balance.total))
 		return
@@ -113,11 +119,11 @@ func updateBalance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	balance.total = balance.total + amount
-	sqlUpdateBalance := `UPDATE balance SET total = $1 WHERE id = $2;`
-	rowUpdateBalance := DB.QueryRow(sqlUpdateBalance, balance.total + amount, balance.id)
+	sqlUpdateBalance := `UPDATE balances SET total = $1 WHERE id = $2;`
+	rowUpdateBalance := DB.QueryRow(sqlUpdateBalance, balance.total+amount, balance.id)
 	if err := rowUpdateBalance.Scan(&balance.id); err != nil {
 		w.WriteHeader(500)
-		json.NewEncoder(w).Encode("Ошибка при обновлении баланса")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Ошибка при обновлении баланса %+v", err))
 		return
 	}
 
@@ -127,7 +133,7 @@ func updateBalance(w http.ResponseWriter, r *http.Request) {
 	rowHistory := DB.QueryRow(sqlHistory, balance.id, amount, comment, createdAt)
 	if err := rowHistory.Scan(&history.id); err != nil {
 		w.WriteHeader(500)
-		json.NewEncoder(w).Encode("Ошибка при сохранении действия в историю")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Ошибка при сохранении действия в историю %+v", err))
 		return
 	}
 
@@ -148,16 +154,18 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 	rowUser := DB.QueryRow(sqlUser, userFromId)
 	if err := rowUser.Scan(&userFrom.id, &userFrom.name); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode("Пользователя c id " + userFromId + " не найден!")
+		//json.NewEncoder(w).Encode("Пользователя c id " + userFromId + " не найден!")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Пользователь c id = %v не найден! %+v", userFromId, err))
 		return
 	}
 
 	var balanceFrom Balance
-	sqlBalance := `SELECT b.id, b.user_id, b.total FROM balance as b WHERE user_id=$1;`
+	sqlBalance := `SELECT b.id, b.user_id, b.total FROM balances as b WHERE user_id=$1;`
 	rowBalance := DB.QueryRow(sqlBalance, userFromId)
 	if err := rowBalance.Scan(&balanceFrom.id, &balanceFrom.user, &balanceFrom.total); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode("Баланс пользователя c id " + userFromId + " не найден!")
+		//json.NewEncoder(w).Encode("Баланс пользователя c id " + userFromId + " не найден!")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Баланс пользователя c id = %v не найден! %+v", userFromId, err))
 		return
 	}
 
@@ -171,16 +179,18 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 	rowUserTo := DB.QueryRow(sqlUserTo, userToId)
 	if err := rowUserTo.Scan(&userTo.id, &userTo.name); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode("Пользователя c id " + userToId + " не найден!")
+		//json.NewEncoder(w).Encode("Пользователя c id " + userToId + " не найден!")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Пользователь c id = %v не найден! %+v", userToId, err))
 		return
 	}
 
 	var balanceTo Balance
-	sqlBalanceTo := `SELECT b.id, b.user_id, b.total FROM balance as b WHERE user_id=$1;`
+	sqlBalanceTo := `SELECT b.id, b.user_id, b.total FROM balances as b WHERE user_id=$1;`
 	rowBalanceTo := DB.QueryRow(sqlBalanceTo, userToId)
 	if err := rowBalanceTo.Scan(&balanceTo.id, &balanceTo.user, &balanceTo.total); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode("Баланс пользователя c id " + userToId + " не найден!")
+		//json.NewEncoder(w).Encode("Баланс пользователя c id " + userToId + " не найден!")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Баланс пользователя c id = %v не найден! %+v", userToId, err))
 		return
 	}
 
@@ -189,25 +199,25 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 		amount, _ = strconv.ParseFloat(params["amount"], 64)
 	}
 
-	if balanceFrom.total < amount{
+	if balanceFrom.total < amount {
 		w.WriteHeader(400)
 		json.NewEncoder(w).Encode(fmt.Sprintf("Недостаточно средств для списания. Баланс: %f", balanceFrom.total))
 		return
 	}
 
-	sqlUpdateBalanceFrom := `UPDATE balance SET total = $1 WHERE id = $2 RETURNING id;`
-	rowUpdateBalance := DB.QueryRow(sqlUpdateBalanceFrom, balanceFrom.total - amount, balanceFrom.id)
+	sqlUpdateBalanceFrom := `UPDATE balances SET total = $1 WHERE id = $2 RETURNING id;`
+	rowUpdateBalance := DB.QueryRow(sqlUpdateBalanceFrom, balanceFrom.total-amount, balanceFrom.id)
 	if err := rowUpdateBalance.Scan(&balanceFrom.id); err != nil {
 		w.WriteHeader(500)
-		json.NewEncoder(w).Encode("Ошибка при списании с баланса")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Ошибка при списании с баланса %+v", err))
 		return
 	}
 
 	sqlUpdateBalanceTo := `UPDATE balance SET total = $1 WHERE id = $2 RETURNING id;`
-	rowUpdateBalanceTo := DB.QueryRow(sqlUpdateBalanceTo, balanceTo.total + amount, balanceTo.id)
+	rowUpdateBalanceTo := DB.QueryRow(sqlUpdateBalanceTo, balanceTo.total+amount, balanceTo.id)
 	if err := rowUpdateBalanceTo.Scan(&balanceTo.id); err != nil {
 		w.WriteHeader(500)
-		json.NewEncoder(w).Encode("Ошибка при пополнении баланса")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Ошибка при пополнении баланса %+v", err))
 		return
 	}
 
@@ -220,7 +230,7 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 	rowHistoryFrom := DB.QueryRow(sqlHistoryFrom, balanceFrom.id, amount, commentFrom, createdAt)
 	if err := rowHistoryFrom.Scan(&historyFrom.id); err != nil {
 		w.WriteHeader(500)
-		json.NewEncoder(w).Encode("Ошибка при сохранении действия в историю")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Ошибка при сохранении действия в историю %+v", err))
 		return
 	}
 
@@ -229,7 +239,7 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 	rowHistoryTo := DB.QueryRow(sqlHistoryTo, balanceTo.id, amount, commentTo, createdAt)
 	if err := rowHistoryTo.Scan(&historyTo.id); err != nil {
 		w.WriteHeader(500)
-		json.NewEncoder(w).Encode("Ошибка при сохранении действия в историю")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Ошибка при сохранении действия в историю %+v", err))
 		return
 	}
 
@@ -271,29 +281,32 @@ func historyBalance(w http.ResponseWriter, r *http.Request) {
 	rowUser := DB.QueryRow(sqlUser, userId)
 	if err := rowUser.Scan(&user.id, &user.name); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode("Пользователя c id " + userId + " не найден!")
+		//json.NewEncoder(w).Encode("Пользователя c id " + userId + " не найден!")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Пользователь c id = %v не найден! %+v", userId, err))
 		return
 	}
 
 	var balance Balance
-	sqlBalance := `SELECT b.id, b.user_id, b.total FROM balance as b WHERE user_id=$1;`
+	sqlBalance := `SELECT b.id, b.user_id, b.total FROM balances as b WHERE user_id=$1;`
 	rowBalance := DB.QueryRow(sqlBalance, userId)
 	if err := rowBalance.Scan(&balance.id, &balance.user, &balance.total); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode("Баланс пользователя c id " + userId + " не найден!")
+		//json.NewEncoder(w).Encode("Баланс пользователя c id " + userId + " не найден!")
+		json.NewEncoder(w).Encode(fmt.Sprintf("Баланс пользователя c id = %v не найден! %+v", userId, err))
 		return
 	}
 
 	var history History
 	sqlHistory := `SELECT h.* FROM history as h WHERE balance_id=$1 ORDER BY $2 $3;`
 	rowHistory := DB.QueryRow(sqlHistory, &balance.id, column, orderBy)
-	if (limit != "0" && ofset != "0") {
+	if limit != "0" && ofset != "0" {
 		sqlHistory = `SELECT h.* FROM history as h WHERE balance_id=$1 ORDER BY $2 $3 LIMIT $4 OFFSET $5;`
 		rowHistory = DB.QueryRow(sqlHistory, &balance.id, column, orderBy, limit, ofset)
 	}
 	if err := rowHistory.Scan(&history.id, &history.balance); err != nil {
 		w.WriteHeader(404)
-		json.NewEncoder(w).Encode("История баланса пользователя c id " + userId + " не найден!")
+		//json.NewEncoder(w).Encode("История баланса пользователя c id " + userId + " не найден!")
+		json.NewEncoder(w).Encode(fmt.Sprintf("История баланса пользователя c id = %v не найдена! %+v", userId, err))
 		return
 	}
 
@@ -313,8 +326,8 @@ func main() {
 	// GET user_id, column, orderBy, limit, offset
 	router.HandleFunc("/balance/history", historyBalance).Methods("GET")
 
-	//Запустите приложение, посетите localhost:8080
-	err := http.ListenAndServe(":8080", router)
+	//Запустите приложение, посетите localhost:8090
+	err := http.ListenAndServe(":8050", router)
 
 	if err != nil {
 		fmt.Print(err)

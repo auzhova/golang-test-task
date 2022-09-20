@@ -8,7 +8,7 @@ services:
             context: .
         restart: always
         ports:
-            - 8080:8080
+            - 8090:8090
         volumes:
             - ./:/app
         depends_on:
@@ -27,6 +27,7 @@ services:
             POSTGRES_PASSWORD: ${DB_PASSWORD}
         volumes:
             - ./postgresql_data:/var/lib/postgresql/data
+            - ./db.sql:/docker-entrypoint-initdb.d/db.sql
         networks:
             - balance
 networks:

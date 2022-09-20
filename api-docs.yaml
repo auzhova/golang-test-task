@@ -1,7 +1,7 @@
 openapi: 3.0.0
 
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8050
 
 info:
   description: Documentation-API
@@ -32,7 +32,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BalanceResponse'
-    put:
+    patch:
       tags:
         - Balance
       security: []
