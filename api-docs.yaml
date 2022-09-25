@@ -1,7 +1,7 @@
 openapi: 3.0.0
 
 servers:
-  - url: http://localhost:8050
+  - url: http://localhost:8090
 
 info:
   description: Documentation-API
@@ -165,7 +165,7 @@ components:
     Currency:
       name: currency
       in: query
-      description: Валюта
+      description: 'Валюта: RUB, USD, EUR'
       schema:
         type: string
 

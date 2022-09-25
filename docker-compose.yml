@@ -7,17 +7,19 @@ services:
             context: .
         restart: always
         ports:
-            - 8090:8090
+            - '8090:8090'
         volumes:
             - ./:/app
         depends_on:
             - database
+        networks:
+            - balance
 
     database:
         image: postgres:12.7
         restart: always
         ports:
-            - 5432:5432
+            - '5432:5432'
         environment:
             POSTGRES_DB: ${DB_DATABASE}
             POSTGRES_USER: ${DB_USERNAME}
@@ -25,3 +27,9 @@ services:
         volumes:
             - ./postgresql_data:/var/lib/postgresql/data
             - ./db.sql:/docker-entrypoint-initdb.d/db.sql
+        networks:
+            - balance
+
+networks:
+    balance:
+        driver: bridge

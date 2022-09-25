@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -30,10 +32,10 @@ type History struct {
 
 func getBalance(w http.ResponseWriter, r *http.Request) {
 	var DB = Init()
-	params := mux.Vars(r)
+	params := r.URL.Query()
 	var userId string = "1"
-	if _, ok := params["user_id"]; ok {
-		userId = params["user_id"]
+	if params.Get("user_id") != "" {
+		userId = params.Get("user_id")
 	}
 
 	var user User
@@ -41,7 +43,6 @@ func getBalance(w http.ResponseWriter, r *http.Request) {
 	rowUser := DB.QueryRow(sqlUser, userId)
 	if err := rowUser.Scan(&user.id, &user.name); err != nil {
 		w.WriteHeader(404)
-		//json.NewEncoder(w).Encode("Пользователя c id " + userId + " не найден!")
 		json.NewEncoder(w).Encode(fmt.Sprintf("Пользователь c id = %v не найден! %+v", userId, err))
 		return
 	}
@@ -51,29 +52,38 @@ func getBalance(w http.ResponseWriter, r *http.Request) {
 	rowBalance := DB.QueryRow(sqlBalance, userId)
 	if err := rowBalance.Scan(&balance.id, &balance.user, &balance.total); err != nil {
 		w.WriteHeader(404)
-		//json.NewEncoder(w).Encode("Баланс пользователя c id " + userId + " не найден!")
 		json.NewEncoder(w).Encode(fmt.Sprintf("Баланс пользователя c id = %v не найден! %+v", userId, err))
-		fmt.Sprintf(" %+v", err)
 		return
 	}
 
 	var currency = map[string]float64{"RUB": 1.00, "USD": 61.25, "EUR": 61.14}
 
-	if _, ok := params["currency"]; ok {
-		balance.total = balance.total / currency[params["currency"]]
+	if params.Get("currency") != "" && currency[params.Get("currency")] != 0 {
+		balance.total = balance.total / currency[params.Get("currency")]
 	}
 
-	json.NewEncoder(w).Encode(balance)
+	response := make(map[string]string)
+	response["id"] = fmt.Sprintf("%d", balance.id)
+	response["user_id"] = fmt.Sprintf("%d", user.id)
+	response["total"] = fmt.Sprintf("%.2f", balance.total)
+
+	json.NewEncoder(w).Encode(response)
 	return
 
 }
 
 func updateBalance(w http.ResponseWriter, r *http.Request) {
 	var DB = Init()
-	params := mux.Vars(r)
+	var params map[string]interface{}
+	body, err := ioutil.ReadAll(r.Body)
+	if err = json.Unmarshal(body, &params); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	var userId string = "1"
 	if _, ok := params["user_id"]; ok {
-		userId = params["user_id"]
+		userId = fmt.Sprintf("%v", params["user_id"])
 	}
 
 	var user User
@@ -81,7 +91,6 @@ func updateBalance(w http.ResponseWriter, r *http.Request) {
 	rowUser := DB.QueryRow(sqlUser, userId)
 	if err := rowUser.Scan(&user.id, &user.name); err != nil {
 		w.WriteHeader(404)
-		//json.NewEncoder(w).Encode("Пользователя c id " + userId + " не найден!")
 		json.NewEncoder(w).Encode(fmt.Sprintf("Пользователя c id = %v не найден! %+v", userId, err))
 		return
 	}
@@ -91,7 +100,6 @@ func updateBalance(w http.ResponseWriter, r *http.Request) {
 	rowBalance := DB.QueryRow(sqlBalance, userId)
 	if err := rowBalance.Scan(&balance.id, &balance.user, &balance.total); err != nil {
 		w.WriteHeader(404)
-		//json.NewEncoder(w).Encode("Баланс пользователя c id " + userId + " не найден!")
 		json.NewEncoder(w).Encode(fmt.Sprintf("Баланс пользователя c id = %v не найден! %+v", userId, err))
 		fmt.Sprintf(" %+v", err)
 		return
@@ -99,28 +107,28 @@ func updateBalance(w http.ResponseWriter, r *http.Request) {
 
 	var amount float64 = 0.00
 	if _, ok := params["amount"]; ok {
-		amount, _ = strconv.ParseFloat(params["amount"], 64)
+		amount, _ = strconv.ParseFloat(fmt.Sprintf("%v", params["amount"]), 64)
 	}
 
 	if amount < 0 && balance.total < amount {
 		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(fmt.Sprintf("Недостаточно средств для списания. Баланс: %f", balance.total))
+		json.NewEncoder(w).Encode(fmt.Sprintf("Недостаточно средств для списания. Баланс: %.2f", balance.total))
 		return
 	}
 
 	comment := ""
 
 	if amount < 0 {
-		comment = fmt.Sprintf("Списание суммы %f", amount)
+		comment = fmt.Sprintf("Списание суммы %.2f", amount)
 	}
 
 	if amount > 0 {
-		comment = fmt.Sprintf("Зачисление суммы %f", amount)
+		comment = fmt.Sprintf("Зачисление суммы %.2f", amount)
 	}
 
 	balance.total = balance.total + amount
-	sqlUpdateBalance := `UPDATE balances SET total = $1 WHERE id = $2;`
-	rowUpdateBalance := DB.QueryRow(sqlUpdateBalance, balance.total+amount, balance.id)
+	sqlUpdateBalance := `UPDATE balances SET total = $1 WHERE id = $2 RETURNING id;`
+	rowUpdateBalance := DB.QueryRow(sqlUpdateBalance, balance.total, balance.id)
 	if err := rowUpdateBalance.Scan(&balance.id); err != nil {
 		w.WriteHeader(500)
 		json.NewEncoder(w).Encode(fmt.Sprintf("Ошибка при обновлении баланса %+v", err))
@@ -143,10 +151,16 @@ func updateBalance(w http.ResponseWriter, r *http.Request) {
 
 func transferBalance(w http.ResponseWriter, r *http.Request) {
 	var DB = Init()
-	params := mux.Vars(r)
+	var params map[string]interface{}
+	body, err := ioutil.ReadAll(r.Body)
+	if err = json.Unmarshal(body, &params); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	var userFromId string = "1"
 	if _, ok := params["user_from"]; ok {
-		userFromId = params["user_from"]
+		userFromId = fmt.Sprintf("%v", params["user_from"])
 	}
 
 	var userFrom User
@@ -154,7 +168,6 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 	rowUser := DB.QueryRow(sqlUser, userFromId)
 	if err := rowUser.Scan(&userFrom.id, &userFrom.name); err != nil {
 		w.WriteHeader(404)
-		//json.NewEncoder(w).Encode("Пользователя c id " + userFromId + " не найден!")
 		json.NewEncoder(w).Encode(fmt.Sprintf("Пользователь c id = %v не найден! %+v", userFromId, err))
 		return
 	}
@@ -164,14 +177,13 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 	rowBalance := DB.QueryRow(sqlBalance, userFromId)
 	if err := rowBalance.Scan(&balanceFrom.id, &balanceFrom.user, &balanceFrom.total); err != nil {
 		w.WriteHeader(404)
-		//json.NewEncoder(w).Encode("Баланс пользователя c id " + userFromId + " не найден!")
 		json.NewEncoder(w).Encode(fmt.Sprintf("Баланс пользователя c id = %v не найден! %+v", userFromId, err))
 		return
 	}
 
 	var userToId string = "2"
 	if _, ok := params["user_to"]; ok {
-		userToId = params["user_to"]
+		userToId = fmt.Sprintf("%v", params["user_to"])
 	}
 
 	var userTo User
@@ -179,7 +191,6 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 	rowUserTo := DB.QueryRow(sqlUserTo, userToId)
 	if err := rowUserTo.Scan(&userTo.id, &userTo.name); err != nil {
 		w.WriteHeader(404)
-		//json.NewEncoder(w).Encode("Пользователя c id " + userToId + " не найден!")
 		json.NewEncoder(w).Encode(fmt.Sprintf("Пользователь c id = %v не найден! %+v", userToId, err))
 		return
 	}
@@ -189,19 +200,18 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 	rowBalanceTo := DB.QueryRow(sqlBalanceTo, userToId)
 	if err := rowBalanceTo.Scan(&balanceTo.id, &balanceTo.user, &balanceTo.total); err != nil {
 		w.WriteHeader(404)
-		//json.NewEncoder(w).Encode("Баланс пользователя c id " + userToId + " не найден!")
 		json.NewEncoder(w).Encode(fmt.Sprintf("Баланс пользователя c id = %v не найден! %+v", userToId, err))
 		return
 	}
 
 	var amount float64 = 0.00
 	if _, ok := params["amount"]; ok {
-		amount, _ = strconv.ParseFloat(params["amount"], 64)
+		amount, _ = strconv.ParseFloat(fmt.Sprintf("%v", params["amount"]), 64)
 	}
 
 	if balanceFrom.total < amount {
 		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(fmt.Sprintf("Недостаточно средств для списания. Баланс: %f", balanceFrom.total))
+		json.NewEncoder(w).Encode(fmt.Sprintf("Недостаточно средств для списания. Баланс: %.2f", balanceFrom.total))
 		return
 	}
 
@@ -213,7 +223,7 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sqlUpdateBalanceTo := `UPDATE balance SET total = $1 WHERE id = $2 RETURNING id;`
+	sqlUpdateBalanceTo := `UPDATE balances SET total = $1 WHERE id = $2 RETURNING id;`
 	rowUpdateBalanceTo := DB.QueryRow(sqlUpdateBalanceTo, balanceTo.total+amount, balanceTo.id)
 	if err := rowUpdateBalanceTo.Scan(&balanceTo.id); err != nil {
 		w.WriteHeader(500)
@@ -221,8 +231,8 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	commentFrom := fmt.Sprintf("Перевод пользователю %s. Сумма %f", userTo.name, amount)
-	commentTo := fmt.Sprintf("Перевод от пользователя %s. Сумма %f", userFrom.name, amount)
+	commentFrom := fmt.Sprintf("Перевод пользователю %s. Сумма %.2f", userTo.name, amount)
+	commentTo := fmt.Sprintf("Перевод от пользователя %s. Сумма %.2f", userFrom.name, amount)
 
 	var historyFrom History
 	createdAt := time.Now()
@@ -250,30 +260,30 @@ func transferBalance(w http.ResponseWriter, r *http.Request) {
 
 func historyBalance(w http.ResponseWriter, r *http.Request) {
 	var DB = Init()
-	params := mux.Vars(r)
+	params := r.URL.Query()
 	var userId string = "1"
-	if _, ok := params["user_id"]; ok {
-		userId = params["user_id"]
+	if params.Get("user_id") != "" {
+		userId = params.Get("user_id")
 	}
 
-	var limit string = "0"
-	if _, ok := params["limit"]; ok {
-		limit = params["limit"]
+	var limit string = ""
+	if params.Get("limit") != "" {
+		limit = params.Get("limit")
 	}
 
-	var ofset string = "0"
-	if _, ok := params["ofset"]; ok {
-		limit = params["ofset"]
+	var offset string = ""
+	if params.Get("offset") != "" {
+		offset = params.Get("offset")
 	}
 
 	var orderBy string = "ASC"
-	if _, ok := params["orderBy"]; ok {
-		orderBy = params["orderBy"]
+	if params.Get("order_by") != "" {
+		orderBy = params.Get("order_by")
 	}
 
 	var column string = "date"
-	if _, ok := params["column"]; ok {
-		column = params["column"]
+	if params.Get("column") != "" {
+		column = params.Get("column")
 	}
 
 	var user User
@@ -281,7 +291,6 @@ func historyBalance(w http.ResponseWriter, r *http.Request) {
 	rowUser := DB.QueryRow(sqlUser, userId)
 	if err := rowUser.Scan(&user.id, &user.name); err != nil {
 		w.WriteHeader(404)
-		//json.NewEncoder(w).Encode("Пользователя c id " + userId + " не найден!")
 		json.NewEncoder(w).Encode(fmt.Sprintf("Пользователь c id = %v не найден! %+v", userId, err))
 		return
 	}
@@ -291,26 +300,45 @@ func historyBalance(w http.ResponseWriter, r *http.Request) {
 	rowBalance := DB.QueryRow(sqlBalance, userId)
 	if err := rowBalance.Scan(&balance.id, &balance.user, &balance.total); err != nil {
 		w.WriteHeader(404)
-		//json.NewEncoder(w).Encode("Баланс пользователя c id " + userId + " не найден!")
 		json.NewEncoder(w).Encode(fmt.Sprintf("Баланс пользователя c id = %v не найден! %+v", userId, err))
 		return
 	}
 
-	var history History
-	sqlHistory := `SELECT h.* FROM history as h WHERE balance_id=$1 ORDER BY $2 $3;`
-	rowHistory := DB.QueryRow(sqlHistory, &balance.id, column, orderBy)
-	if limit != "0" && ofset != "0" {
-		sqlHistory = `SELECT h.* FROM history as h WHERE balance_id=$1 ORDER BY $2 $3 LIMIT $4 OFFSET $5;`
-		rowHistory = DB.QueryRow(sqlHistory, &balance.id, column, orderBy, limit, ofset)
+	sqlHistory := `SELECT h.* FROM history as h WHERE balance_id=$1 ORDER BY '$2' $3;`
+	rows, err := DB.Query(sqlHistory, &balance.id, column, orderBy)
+	if limit != "" && offset != "" {
+		sqlHistory = `SELECT h.* FROM history as h WHERE balance_id=$1 ORDER BY '$2' $3 LIMIT $4 OFFSET $5;`
+		//rows, err := DB.Query(sqlHistory, &balance.id, column, orderBy, limit, offset)
 	}
-	if err := rowHistory.Scan(&history.id, &history.balance); err != nil {
+
+	if err != nil {
 		w.WriteHeader(404)
-		//json.NewEncoder(w).Encode("История баланса пользователя c id " + userId + " не найден!")
 		json.NewEncoder(w).Encode(fmt.Sprintf("История баланса пользователя c id = %v не найдена! %+v", userId, err))
 		return
 	}
 
-	json.NewEncoder(w).Encode(history)
+	type Response struct {
+		id         string
+		balance_id string
+		amount     string
+		comment    string
+		date       string
+	}
+
+	responses := make([]*Response, 0)
+	for rows.Next() {
+		var history History
+		response := new(Response)
+		rows.Scan(&history.id, &history.balance, &history.amount, &history.comment, &history.date)
+		response.id = fmt.Sprintf("%d", history.id)
+		response.balance_id = fmt.Sprintf("%d", balance.id)
+		response.amount = fmt.Sprintf("%.2f", history.amount)
+		response.comment = history.comment
+		response.date = history.date.String()
+		responses = append(responses, response)
+	}
+	log.Println(responses)
+	json.NewEncoder(w).Encode(responses)
 	return
 }
 
@@ -327,7 +355,7 @@ func main() {
 	router.HandleFunc("/balance/history", historyBalance).Methods("GET")
 
 	//Запустите приложение, посетите localhost:8090
-	err := http.ListenAndServe(":8050", router)
+	err := http.ListenAndServe(":8090", router)
 
 	if err != nil {
 		fmt.Print(err)
